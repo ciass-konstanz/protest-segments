@@ -1,0 +1,14 @@
+[submodule "detectron2"]
+	path = modules/detectron2
+	url = https://github.com/facebookresearch/detectron2.git
+	branch = main
+
+[submodule "Detic"]
+	path = modules/Detic
+	url = https://github.com/facebookresearch/Detic.git
+	branch = main
+
+[submodule "MaskDINO"]
+	path = modules/MaskDINO
+	url = https://github.com/IDEA-Research/MaskDINO.git
+	branch = main
