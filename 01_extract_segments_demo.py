@@ -41,7 +41,7 @@ def extract_segments_demo(
     logger.info(f"Extract segments demo with arguments {args}")
     logger.info("Prepare segmenter")
 
-    if args.gpu:
+    if not args.cpu:
         if args.vocabulary == "coco":
             # import modules only available with gpu
             sys.path.insert(0, "./modules/MaskDINO")
@@ -186,7 +186,7 @@ def extract_segments_demo(
             predictor = DefaultPredictor(cfg)
             # class names
             class_names = {class_num: class_name.lower() for class_num, class_name in enumerate(MetadataCatalog.get(cfg.DATASETS.TRAIN[0]).thing_classes)}
-
+            print(cfg.DATASETS.TRAIN[0])
         elif args.vocabulary == "lvis":
             # config
             cfg = get_cfg()
@@ -201,7 +201,7 @@ def extract_segments_demo(
             predictor = DefaultPredictor(cfg)
             # class names
             class_names = {class_num: class_name.lower() for class_num, class_name in enumerate(MetadataCatalog.get(cfg.DATASETS.TRAIN[0]).thing_classes)}
-
+            print(cfg.DATASETS.TRAIN[0])
     # load image
     logger.info(f"Loading image {args.image}")
     img = np.array(Image.open(args.image).convert('RGB'))
@@ -356,9 +356,9 @@ def get_parser() -> argparse.ArgumentParser:
         help="Path to feature vector (default: docs/demo_features.csv)"
     )
     parser.add_argument(
-        "--gpu",
-        action="store_true",
-        help="Use GPU"
+        "--cpu",
+        action='store_true',
+        help="Use CPU only"
     )
 
     return parser

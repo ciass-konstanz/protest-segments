@@ -194,127 +194,120 @@ def train_models_conventional(
     torch.manual_seed(args.seed)
     cudnn.deterministic = True
 
-    # results
-    results = pd.DataFrame()
+    # loop over confidence levels
+    confidences = ["low", "high"]
+    for conf in confidences:
+        logger.info(f"Starting creating models for confidence level {conf}")
 
-    # loop over methods
-    methods = ["resnet50", "vit"]
-    for mod in methods:
-        logger.info(f"Starting creating models for classification method {mod}")
+        # loop over methods
+        methods = ["resnet50", "vit"]
+        for mod in methods:
+            logger.info(f"Starting creating models for classification method {mod}")
 
-        if mod == "resnet50":
-            # transform pipeline
-            transform = transforms.Compose([
-                transforms.RandomResizedCrop(256),  # 416
-                transforms.RandomHorizontalFlip(),
-                transforms.RandomRotation(30),
-                transforms.RandomApply([transforms.ColorJitter(0.4, 0.4, 0.4, 0.1)], p=0.8),
-                transforms.CenterCrop(224),  # 384
-                transforms.ToTensor(),
-                transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
-            ])
-            # device
-            device = torch.device("cuda:0")
-            # model
-            model = timm.create_model("resnet50", pretrained=True, num_classes=2)
-            model = model.to(device)
-            net = NeuralNetClassifier(
-                model,
-                criterion=nn.CrossEntropyLoss,
-                optimizer=torch.optim.SGD,
-                max_epochs=100,
-                iterator_train__num_workers=args.num_workers,
-                iterator_valid__num_workers=args.num_workers,
-                batch_size=128,
-                optimizer__lr=0.001,
-                device=device,
-                train_split=False,
-                verbose=False,
-                callbacks=[
-                    ("lr_scheduler", LRScheduler(policy=ReduceLROnPlateau, factor=0.1, patience=10)),
-                    ("early_stopping", EarlyStopping(monitor="train_loss", patience=10, threshold=0.0001, sink=logger.info)),
-                    ("logger", PrintLog(sink=logger.info))
-                ],
+            if mod == "resnet50":
+                # transform pipeline
+                transform = transforms.Compose([
+                    transforms.RandomResizedCrop(256),
+                    transforms.RandomHorizontalFlip(),
+                    transforms.RandomRotation(30),
+                    transforms.RandomApply([transforms.ColorJitter(0.4, 0.4, 0.4, 0.1)], p=0.8),
+                    transforms.CenterCrop(224),
+                    transforms.ToTensor(),
+                    transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
+                ])
+                # device
+                device = torch.device("cuda:0")
+                # model
+                model = timm.create_model("resnet50", pretrained=True, num_classes=2)
+                model = model.to(device)
+                net = NeuralNetClassifier(
+                    model,
+                    criterion=nn.CrossEntropyLoss,
+                    optimizer=torch.optim.SGD,
+                    max_epochs=100,
+                    iterator_train__num_workers=args.num_workers,
+                    iterator_valid__num_workers=args.num_workers,
+                    batch_size=128,
+                    optimizer__lr=0.001,
+                    device=device,
+                    train_split=False,
+                    verbose=False,
+                    callbacks=[
+                        ("lr_scheduler", LRScheduler(policy=ReduceLROnPlateau, factor=0.1, patience=10)),
+                        ("early_stopping", EarlyStopping(monitor="train_loss", patience=10, threshold=0.0001, sink=logger.info)),
+                        ("logger", PrintLog(sink=logger.info))
+                    ],
+                )
+                # hyperparams
+                params = [{"optimizer__lr": [1e-03, 1e-04], "optimizer__momentum": [0.99, 0.9]}]
+
+            elif mod == "vit":
+                # transform pipeline
+                transform = transforms.Compose([
+                    transforms.RandomResizedCrop(416),
+                    transforms.RandomHorizontalFlip(),
+                    transforms.RandomRotation(30),
+                    transforms.RandomApply([transforms.ColorJitter(0.4, 0.4, 0.4, 0.1)], p=0.8),
+                    transforms.CenterCrop(384),
+                    transforms.ToTensor(),
+                    transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
+                ])
+                # device
+                device = torch.device("cuda:0")
+                # model
+                model = timm.create_model("vit_base_patch16_384", pretrained=True, num_classes=2)
+                model = model.to(device)
+                net = NeuralNetClassifier(
+                    model,
+                    criterion=nn.CrossEntropyLoss,
+                    optimizer=torch.optim.SGD,
+                    max_epochs=100,
+                    iterator_train__num_workers=args.num_workers,
+                    iterator_valid__num_workers=args.num_workers,
+                    batch_size=32,
+                    optimizer__lr=0.001,
+                    device=device,
+                    train_split=False,
+                    verbose=False,
+                    callbacks=[
+                        ("lr_scheduler", LRScheduler(policy=ReduceLROnPlateau, factor=0.1, patience=10)),
+                        ("early_stopping", EarlyStopping(monitor="train_loss", patience=10, threshold=0.0001, sink=logger.info)),
+                        ("logger", PrintLog(sink=logger.info))
+                    ],
+                )
+                # hyperparams
+                params = [{"optimizer__lr": [1e-06, 1e-05], "optimizer__momentum": [0.99, 0.9]}]
+
+            # datasets
+            dataset = TarDataset(archive=args.images_archive, images=args.images, transform=transform, confidence=conf, mode="train")
+            dataset_sliced = SliceDataset(dataset=dataset)
+            dataset_y = np.array(dataset.targets)
+
+            train_indices, val_indices = train_test_split(
+                list(range(len(dataset.targets))),
+                test_size=0.2,
+                shuffle=True,
+                random_state=args.seed
             )
-            # hyperparams
-            params = [{"optimizer__lr": [1e-03, 1e-04], "optimizer__momentum": [0.99, 0.9]}]
 
-        elif mod == "vit":
-            # transform pipeline
-            transform = transforms.Compose([
-                transforms.RandomResizedCrop(416),
-                transforms.RandomHorizontalFlip(),
-                transforms.RandomRotation(30),
-                transforms.RandomApply([transforms.ColorJitter(0.4, 0.4, 0.4, 0.1)], p=0.8),
-                transforms.CenterCrop(384),
-                transforms.ToTensor(),
-                transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
-            ])
-            # device
-            device = torch.device("cuda:0")
-            # model
-            model = timm.create_model("vit_base_patch16_384", pretrained=True, num_classes=2)
-            model = model.to(device)
-            net = NeuralNetClassifier(
-                model,
-                criterion=nn.CrossEntropyLoss,
-                optimizer=torch.optim.SGD,
-                max_epochs=100,
-                iterator_train__num_workers=args.num_workers,
-                iterator_valid__num_workers=args.num_workers,
-                batch_size=32,
-                optimizer__lr=0.001,
-                device=device,
-                train_split=False,
-                verbose=False,
-                callbacks=[
-                    ("lr_scheduler", LRScheduler(policy=ReduceLROnPlateau, factor=0.1, patience=10)),
-                    ("early_stopping", EarlyStopping(monitor="train_loss", patience=10, threshold=0.0001, sink=logger.info)),
-                    ("logger", PrintLog(sink=logger.info))
-                ],
+            # create grid search
+            search = GridSearchCV(
+                net,
+                param_grid=params,
+                scoring=["accuracy", "precision", "recall", "roc_auc", "f1"],
+                refit="f1",
+                cv=iter([(train_indices, val_indices)]),
+                verbose=3,
+                error_score="raise",
+                return_train_score=True,
             )
-            # hyperparams
-            params = [{"optimizer__lr": [1e-06, 1e-05], "optimizer__momentum": [0.99, 0.9]}]
+            search.fit(dataset_sliced, dataset_y)
+            logger.info(f"Finished training model with scores {search.best_score_} and parameters {search.best_params_}")
 
-        # datasets
-        dataset = TarDataset(archive=args.images_archive, images=args.images, transform=transform, confidence="low", mode="train")
-        dataset_sliced = SliceDataset(dataset=dataset)
-        dataset_y = np.array(dataset.targets)
-
-        train_indices, val_indices = train_test_split(
-            list(range(len(dataset.targets))),
-            test_size=0.2,
-            shuffle=True,
-            random_state=args.seed
-        )
-
-        # create grid search
-        search = GridSearchCV(
-            net,
-            param_grid=params,
-            scoring=["accuracy", "precision", "recall", "roc_auc", "f1"],
-            refit="f1",
-            cv=iter([(train_indices, val_indices)]),
-            verbose=3,
-            error_score="raise",
-            return_train_score=True,
-        )
-        search.fit(dataset_sliced, dataset_y)
-        logger.info(f"Finished training model with scores {search.best_score_} and parameters {search.best_params_}")
-
-        # store results
-        results_iter = pd.DataFrame(search.cv_results_)
-        results_iter["conf"] = "low"
-        results_iter["method"] = mod
-
-        # append results
-        results = pd.concat([results, results_iter], axis=0, ignore_index=True)
-        results.to_csv(args.trainings, index=False, float_format="%f")
-
-        # save model
-        path = args.models / f"{mod}_low.pth"
-        search.best_estimator_.save_params(f_params=str(path))
-        logger.info(f"Saved model {path}")
+            # save model
+            path = args.models / f"{mod}_{conf}.pth"
+            search.best_estimator_.save_params(f_params=str(path))
+            logger.info(f"Saved model {path}")
 
     logger.info("Finished training models conventional")
 
@@ -367,11 +360,6 @@ def get_parser() -> argparse.ArgumentParser:
         "--models",
         type=Path,
         help="Path to directory of models"
-    )
-    parser.add_argument(
-        "--trainings",
-        type=Path,
-        help="Path to trainings"
     )
     parser.add_argument(
         "--seed",

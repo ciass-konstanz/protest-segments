@@ -19,7 +19,7 @@
       <span> · </span>
       <a target="_blank" href="https://huggingface.co/spaces/ciass/protest-segments">Demo</a>
       <span> · </span>
-      <a target="_blank" href="https://dataverse.harvard.edu/privateurl.xhtml?token=263d75e4-202b-4cee-a35e-24d142e91cb8">Data</a>
+      <a target="_blank" href="">Data</a>
     </h4>
   </div>
 </div>
@@ -176,7 +176,7 @@ vocabulary `lvis` and feature aggregation `count`, you can execute the following
 command. This will save a segmented image `docs/demo_segments.jpg` and the feature 
 vector `docs/demo_features.csv`.
 
-If you want to use your graphics card, then you also need to add the flag `--gpu`. 
+If you want to use your graphics card, then you need to remove the flag `--cpu`. 
 
 ```bash
 python3 01_extract_segments_demo.py \
@@ -184,7 +184,8 @@ python3 01_extract_segments_demo.py \
   --vocabulary lvis \
   --feature-aggregation count \
   --image-segmented docs/demo_segments.jpg \
-  --features docs/demo_features.csv
+  --features docs/demo_features.csv \
+  --cpu
 ```
 
 For the different configurations the following segmentation models are used.
@@ -199,7 +200,7 @@ For the different configurations the following segmentation models are used.
 <!-- Data -->
 ## Data
 
-You can download the data via [Dataverse](https://dataverse.harvard.edu/privateurl.xhtml?token=263d75e4-202b-4cee-a35e-24d142e91cb8).
+You can download the data via [Dataverse]().
 
 <!-- Images -->
 ### Images
@@ -255,7 +256,7 @@ The data that we can make publicly available are the segments that we have recog
 the images from our data set. We recognized these segments using the Python script 
 `02_extract_segments.py`. We recognized the COCO segments with the [configuration](https://github.com/IDEA-Research/MaskDINO/blob/main/configs/coco/instance-segmentation/swin/maskdino_R50_bs16_50ep_4s_dowsample1_2048.yaml) 
 and [weights]((https://github.com/IDEA-Research/detrex-storage/releases/download/maskdino-v0.1.0/maskdino_swinl_50ep_300q_hid2048_3sd1_instance_maskenhanced_mask52.3ap_box59.0ap.pth)) 
-of [Li et al (2023)](https://arxiv.org/abs/2206.02777). We recognized the LVIS segments 
+of [Li et al. (2023)](https://arxiv.org/abs/2206.02777). We recognized the LVIS segments 
 using the [configuration](https://github.com/facebookresearch/Detic/blob/main/configs/Detic_LCOCOI21k_CLIP_SwinB_896b32_4x_ft4x_max-size.yaml) 
 and [weights](https://dl.fbaipublicfiles.com/detic/Detic_LCOCOI21k_CLIP_SwinB_896b32_4x_ft4x_max-size.pth) 
 of [Zhou et al. (2022)](https://arxiv.org/abs/2201.02605).
@@ -299,7 +300,7 @@ located in the file `data/predictions_vit_low.csv`.
 <!-- Model Weights -->
 ## Model Weights
 
-We also make the model weights of all our models available via [Dataverse](https://dataverse.harvard.edu/privateurl.xhtml?token=263d75e4-202b-4cee-a35e-24d142e91cb8).
+We also make the model weights of all our models available via [Dataverse]().
 
 These model weights can be used on our data, but possibly also on other data for which 
 protest should be predicted. An overview of all models and their model weights can be 
@@ -329,33 +330,31 @@ The code `02_extract_segments.py` creates the segments from our image dataset. T
 execute this code, however, you need a graphics card. In addition, you also need the 
 image archive of our dataset, which we cannot provide here. It can only be made 
 available on request (see image archive). But even without the image archive you can 
-execute `03_train_models_segments.py`, `05_predict_models.py`, `06_eval_models.py` and 
-`07_eval_importances.py`.
+execute the code `03_train_models_segments.py`, `05_predict_models.py`, 
+`06_eval_models.py`, `07_eval_importances.py`, `08_eval_dataset.py` and 
+`10_eval_temporal.py`.
 
 To segment our image dataset with the COCO vocabulary, you can execute the following 
-command. This will save the created segments `data/segments_coco.csv`.
+command. This will save the created segments `data/segments_coco.csv` [~17 hours].
 
 ```bash
 python3 02_extract_segments.py \
   --images data/images.csv \
   --images-archive data/images.tar \
   --segments data/segments_coco.csv \
-  --vocabulary coco \
-  --model models/maskdino_swinl_50ep_300q_hid2048_3sd1_instance_maskenhanced_mask52.3ap_box59.0ap.pth \
-  --config modules/MaskDINO/configs/coco/instance-segmentation/swin/maskdino_R50_bs16_50ep_4s_dowsample1_2048.yaml
+  --vocabulary coco
 ```
 
 By executing the following command, the same will be done for our image dataset with the 
-LVIS vocabulary. This will save the created segments `data/segments_lvis.csv`.
+LVIS vocabulary. This will save the created segments `data/segments_lvis.csv` [~5 
+hours].
 
 ```bash
 python3 02_extract_segments.py \
   --images data/images.csv \
   --images-archive data/images.tar \
   --segments data/segments_lvis.csv \
-  --vocabulary lvis \
-  --model models/Detic_LCOCOI21k_CLIP_SwinB_896b32_4x_ft4x_max-size.pth \
-  --config modules/Detic/configs/Detic_LCOCOI21k_CLIP_SwinB_896b32_4x_ft4x_max-size.yaml
+  --vocabulary lvis
 ```
 
 <!-- Train Models Segments -->
@@ -364,17 +363,15 @@ python3 02_extract_segments.py \
 The code `03_train_models_segments.py` trains all models that use our two-stage 
 classification approach. 
 
-To train the models you can execute the following command. This will save information 
-about the training `data/trainings.csv` and the weight of the models in the folder 
-`models`.
+To train the models you can execute the following command. This will save the weights of 
+the models in the folder `models` [~4 days].
 
 ```bash
 python3 03_train_models_segments.py \
   --images data/images.csv \
   --segments-coco data/segments_coco.csv \
   --segments-lvis data/segments_lvis.csv \
-  --models models/ \
-  --trainings data/trainings.csv
+  --models models/
 ```
 
 <!-- Train Models Conventional -->
@@ -384,19 +381,17 @@ The code `04_train_models_conventional.py` trains all the conventional computer 
 models on our dataset. To execute this code, however, you need a graphics card. In 
 addition, you also need the image archive of our dataset, which we cannot provide here. 
 It can only be made available on request (see image archive). But even without the image 
-archive you can execute `05_predict_models.py`, `06_eval_models.py` and 
-`07_eval_importances.py`.
+archive you can execute `05_predict_models.py`, `06_eval_models.py`, 
+`07_eval_importances.py`, `08_eval_dataset.py` and `10_eval_temporal.py`.
 
-To train the models you can execute the following command. This will save information 
-about the training `data/trainings.csv` and the weight of the models in the folder 
-`models`.
+To train the models you can execute the following command. This will save the weights of 
+the models in the folder `models` [~19 days].
 
 ```bash
 python3 04_train_models_conventional.py \
   --images data/images.csv \
   --images-archive data/images.tar \
-  --models models/ \
-  --trainings data/trainings.csv
+  --models models/
 ```
 
 <!-- Predict Models -->
@@ -406,7 +401,7 @@ The code `05_predict_models.py` uses all models to predict whether the images ar
 protest images. 
 
 To make the predictions with our two-stage approach only, you can execute the following 
-command. This saves the predictions in the folder `data`.
+command. This saves the predictions in the folder `data` [~25 minutes].
 
 ```bash
 python3 05_predict_models.py \
@@ -420,8 +415,9 @@ python3 05_predict_models.py \
 To make predictions using both our two-stage approach and the conventional approaches, 
 you can execute the following command. This requires to have the image archive of our 
 dataset as well as the [model weights](https://www.dropbox.com/s/rxslj6x01otf62i/model_best.pth.tar?dl=0) 
-for the ResNet50 from [Won et al. (2017)](https://arxiv.org/abs/1709.06204). This saves 
-the predictions in the folder `data`.
+for the ResNet50 from [Won et al. (2017)](https://arxiv.org/abs/1709.06204). The model 
+weights must be saved as file `resnet.pth` inside the folder `models`. This saves the 
+predictions in the folder `data` [~90 minutes].
 
 ```bash
 python3 05_predict_models.py \
@@ -440,7 +436,8 @@ python3 05_predict_models.py \
 The code `06_eval_models.py` evaluates the predictions of all models. 
 
 To evaluate the predictions, you can execute the following command. This will save the 
-table `tables/table_a3.tex` and figure `figure/figure_4.pdf`.
+figure `figures/figure_4.pdf`, table `tables/table_a3.tex`, table `tables/table_a4.tex`
+and table `tables/table_a6.tex` [~20 seconds].
 
 ```bash
 python3 06_eval_models.py \
@@ -454,14 +451,17 @@ python3 06_eval_models.py \
 <!-- Evaluate Importances -->
 ### Evaluate Importances
 
-The code `07_eval_importances.py` evaluates the importances of one of our two-stage 
-models. The model that is evaluated uses the confidence low, classification method 
-gradient-boosted tree and feature area sum.
+The code `07_eval_importances.py` evaluates the importances of two of our two-stage 
+models. For the main article, the model that is evaluated uses the confidence low, 
+classification method gradient-boosted tree and feature area sum. For the online 
+appendix the same model is evaluated but using the confidence high.
 
 To evaluate the importances, you can execute the following command. This will save the 
-importances `data/features_seg_low_xgboost_lvis_area_sum.csv`, figure 
-`figures/figure_5.pdf`, `figures/figure_6_1.pdf`, `figures/figure_6_2.pdf` and 
-`figures/figure_6_3.pdf`.
+importances `data/features_seg_low_xgboost_lvis_area_sum.csv`, importances 
+`data/features_seg_high_xgboost_lvis_area_sum.csv`, figure `figures/figure_5.pdf`, 
+figure `figures/figure_6_1.pdf`, figure `figures/figure_6_2.pdf`, figure 
+`figures/figure_6_3.pdf`, figure `figures/figure_a2.pdf` and figure 
+`figures/figure_a3.pdf` [~23 hours].
 
 ```bash
 python3 07_eval_importances.py \
@@ -470,6 +470,59 @@ python3 07_eval_importances.py \
   --models models/ \
   --features data/ \
   --figures figures/
+```
+
+<!-- Evaluate Dataset -->
+### Evaluate Dataset
+
+The code `08_eval_dataset.py` evaluates the image dataset. 
+
+To evaluate the dataset, you can execute the following command. This will save the table 
+`tables/table_a2.tex` [~2 seconds].
+
+```bash
+python3 08_eval_dataset.py \
+  --images data/images.csv \
+  --tables tables/
+```
+
+<!-- Evaluate Clusters -->
+### Evaluate Clusters
+
+The code `09_eval_clusters.py` evaluates the images by clustering them, analyzing the 
+performance within these clusters and visualizing the images within these clusters. 
+
+To evaluate the clusters, you can execute the following command. This requires to have 
+the image archive of our dataset. This will save the embeddings `data/embeddings.csv`, 
+clusters `data/clusters.csv`, table `tables/table_a5.tex` and figure 
+`tables/figure_a1.pdf` [~2 hours].
+
+```bash
+python3 09_eval_clusters.py \
+  --images data/images.csv \
+  --images-archive data/images.tar \
+  --models models/ \
+  --predictions data/ \
+  --embeddings data/ \
+  --clusters data/ \
+  --tables tables/ \
+  --figures figures/ 
+```
+
+<!-- Evaluate Temporal Trends -->
+### Evaluate Temporal Trends
+
+The code `10_eval_temporal.py` evaluates the temporal trends of the most frequent 
+segments on the protest images.
+
+To evaluate the temporal trends, you can execute the following command. This will save 
+the figure `figures/figure_a4.pdf` [~10 seconds].
+
+```bash
+python3 10_eval_temporal.py \
+  --images data/images.csv \
+  --segments-lvis data/segments_lvis.csv \
+  --figures figures/ 
 ```
 
 <!-- License -->

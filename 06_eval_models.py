@@ -40,6 +40,8 @@ def eval_models(
 
     # read models
     models_df = pd.read_csv(args.models)
+    # filter models by confidence level
+    models_df = models_df.loc[models_df["confidence"]=="low"]
     models_df = models_df.set_index("name")
 
     for model_name, model in models_df.iterrows():
@@ -73,7 +75,7 @@ def eval_models(
         models_df.loc[model_name, ["train_prec", "train_rec", "train_f1", "test_prec", "test_rec", "test_f1"]] = prec_train, rec_train, f1_train, prec_test, rec_test, f1_test
 
     # prepare table
-    table_df = models_df.drop(columns=["approach", "vocabulary", "feature", "method", "weights", "predictions"])
+    table_df = models_df.drop(columns=["approach", "confidence", "vocabulary", "feature", "method", "weights", "predictions"])
 
     # change columns
     table_df.columns = pd.MultiIndex.from_tuples(
@@ -88,14 +90,15 @@ def eval_models(
         columns={"train_prec": "Precision", "test_prec": "Precision", "train_rec": "Recall",
                  "test_rec": "Recall", "train_f1": "F1", "test_f1": "F1"}, level=1
     )
+    table_df.index = table_df.index.rename("")
 
     # convert table in latex
     table = table_df.style.format(thousands=",", precision=4).to_latex(
-        position="ht",
-        label="table:models",
-        caption=("Evaluation of different methods", "Evaluation of different methods"),
+        position="hb!",
+        label="tab:models",
+        caption="Evaluation of different methods",
         column_format="lrrrrrr",
-        position_float="raggedleft",
+        position_float="centering",
         hrules=True,
         multicol_align="c"
     )
@@ -103,6 +106,8 @@ def eval_models(
     # save table
     with open(args.tables / "table_a3.tex", "w") as file:
         file.write(table)
+
+    logger.info("Saved table a3")
 
     # set up figure params
     sns.set_style("ticks")
@@ -112,9 +117,10 @@ def eval_models(
               "xtick.color": "black",
               "axes.labelcolor": "black",
               "axes.edgecolor": "black",
-              "text.usetex": True,
-              "font.family": "serif",
-              "font.serif": ["Computer Modern Serif"],
+              #"text.usetex": True,
+              #"font.family": "serif",
+              #"font.serif": ["Computer Modern Serif"],
+              "font.serif": ["Verdana"],
               "axes.labelsize": 9,
               "axes.titlesize": 9,
               "legend.fontsize": 7,
@@ -187,6 +193,157 @@ def eval_models(
 
     # save figure
     plt.savefig(args.figures / "figure_4.pdf", format="pdf", bbox_inches="tight", pad_inches=0.01, dpi=200)
+    logger.info("Saved figure 4")
+
+    # read models
+    models_df = pd.read_csv(args.models)
+    # filter models by confidence level
+    models_df = models_df.loc[models_df["confidence"]=="low"]
+    # filter models by desired versions
+    models_df = models_df.loc[(models_df["name"] == "Segments (LVIS, area sum, boosted tree)") | (models_df["name"] == "ViT (self-trained)")]
+    models_df = models_df.replace({"Segments (LVIS, area sum, boosted tree)": "Segments", "ViT (self-trained)": "ViT"})
+    models_df = models_df.set_index("name")
+
+    # define countries
+    countries = {"ARG": "Argentina", "BHR": "Bahrain", "CHL": "Chile", "DZA": "Algeria", "IDN": "Indonesia", "LBN": "Lebanon", "NGA": "Nigeria", "RUS": "Russia", "VEN": "Venezuela", "ZAF": "South Africa"}
+
+    # create dataframe
+    index = pd.MultiIndex.from_product([models_df.index.unique(), countries.values()], names=["model", "country"])
+    columns = pd.MultiIndex.from_product([["Training", "Testing"], ["Precision", "Recall", "F1"]], names=["split", "metric"])
+    models_country_df = pd.DataFrame(index=index, columns=columns)
+
+    for model_name, model in models_df.iterrows():
+        logger.info(f"Starting evaluating model {model_name}")
+        # get predictions
+        predictions = pd.read_csv(args.predictions / model["predictions"])
+        # merge predictions with images
+        predictions = pd.merge(images, predictions.loc[:, ["id", "protest_pred"]], how="left", on="id")
+        # group by location
+        for country_name, country_predictions in predictions.groupby("location"):
+            # evaluate model on training set
+            y_train_pred = country_predictions.loc[country_predictions.split == "train", "protest_pred"]
+            y_train_pred = np.where(y_train_pred >= 0.5, 1, 0)
+            y_train = country_predictions.loc[country_predictions.split == "train", "protest"].to_numpy(dtype=np.int64)
+            # precision
+            prec_train = precision_score(y_train, y_train_pred)
+            models_country_df.loc[((model_name, countries[country_name]), ("Training", "Precision"))] = prec_train
+            # recall
+            rec_train = recall_score(y_train, y_train_pred)
+            models_country_df.loc[((model_name, countries[country_name]), ("Training", "Recall"))] = rec_train
+            # f1
+            f1_train = f1_score(y_train, y_train_pred)
+            models_country_df.loc[((model_name, countries[country_name]), ("Training", "F1"))] = f1_train
+
+            # evaluate model on testing set
+            y_test_pred = country_predictions.loc[country_predictions.split == "test", "protest_pred"]
+            y_test_pred = np.where(y_test_pred >= 0.5, 1, 0)
+            y_test = country_predictions.loc[country_predictions.split == "test", "protest"].to_numpy(dtype=np.int64)
+            # precision
+            prec_test = precision_score(y_test, y_test_pred)
+            models_country_df.loc[((model_name, countries[country_name]), ("Testing", "Precision"))] = prec_test
+            # recall
+            rec_test = recall_score(y_test, y_test_pred)
+            models_country_df.loc[((model_name, countries[country_name]), ("Testing", "Recall"))] = rec_test
+            # f1
+            f1_test = f1_score(y_test, y_test_pred)
+            models_country_df.loc[((model_name, countries[country_name]), ("Testing", "F1"))] = f1_test
+
+    models_country_df.index = models_country_df.index.rename(["", ""])
+    models_country_df.columns = models_country_df.columns.rename(["", ""])
+
+    # convert table in latex
+    table = models_country_df.style.format(thousands=",", precision=4).to_latex(
+        position="hb!",
+        label="tab:model_country",
+        caption="Evaluation of different methods per country",
+        column_format="llrrrrrr",
+        position_float="centering",
+        hrules=True,
+        multicol_align="c"
+    )
+
+    # save table
+    with open(args.tables / "table_a4.tex", "w") as file:
+        file.write(table)
+
+    logger.info("Saved table a4")
+
+    # read images
+    images = pd.read_csv(args.images)
+    # filter images
+    images = images.loc[(images["protest"].isin([0, 3]))]
+    # recode protest labels
+    images["protest"] = images["protest"].replace({0: 0, 3: 1})
+
+    # read models
+    models_df = pd.read_csv(args.models)
+    # filter models by confidence level
+    models_df = models_df.loc[models_df["confidence"]=="high"]
+    models_df = models_df.set_index("name")
+
+    for model_name, model in models_df.iterrows():
+        logger.info(f"Starting evaluating model {model_name}")
+        # get predictions
+        predictions = pd.read_csv(args.predictions / model["predictions"])
+        # merge predictions with images
+        predictions = pd.merge(images, predictions.loc[:, ["id", "protest_pred"]], how="left", on="id")
+        # evaluate model on training set
+        y_train_pred = predictions.loc[predictions.split == "train", "protest_pred"]
+        y_train_pred = np.where(y_train_pred >= 0.5, 1, 0)
+        y_train = predictions.loc[predictions.split == "train", "protest"].to_numpy(dtype=np.int64)
+        # precision
+        prec_train = precision_score(y_train, y_train_pred)
+        # recall
+        rec_train = recall_score(y_train, y_train_pred)
+        # f1
+        f1_train = f1_score(y_train, y_train_pred)
+
+        # evaluate model on testing set
+        y_test_pred = predictions.loc[predictions.split == "test", "protest_pred"]
+        y_test_pred = np.where(y_test_pred >= 0.5, 1, 0)
+        y_test = predictions.loc[predictions.split == "test", "protest"].to_numpy(dtype=np.int64)
+        # precision
+        prec_test = precision_score(y_test, y_test_pred)
+        # recall
+        rec_test = recall_score(y_test, y_test_pred)
+        # f1
+        f1_test = f1_score(y_test, y_test_pred)
+        # save results
+        models_df.loc[model_name, ["train_prec", "train_rec", "train_f1", "test_prec", "test_rec", "test_f1"]] = prec_train, rec_train, f1_train, prec_test, rec_test, f1_test
+
+    # prepare table
+    table_df = models_df.drop(columns=["approach", "confidence", "vocabulary", "feature", "method", "weights", "predictions"])
+
+    # change columns
+    table_df.columns = pd.MultiIndex.from_tuples(
+        [
+            ("train", "train_prec"), ("train", "train_rec"), ("train", "train_f1"),
+            ("test", "test_prec"), ("test", "test_rec"), ("test", "test_f1")
+        ], names=["", ""]
+    )
+
+    # rename columns
+    table_df = table_df.rename(columns={"train": "Training", "test": "Testing"},level=0).rename(
+        columns={"train_prec": "Precision", "test_prec": "Precision", "train_rec": "Recall",
+                 "test_rec": "Recall", "train_f1": "F1", "test_f1": "F1"}, level=1
+    )
+
+    # convert table in latex
+    table = table_df.style.format(thousands=",", precision=4).to_latex(
+        position="hb!",
+        label="tab:models_high",
+        caption="Evaluation of different methods with high confidence",
+        column_format="lrrrrrr",
+        position_float="centering",
+        hrules=True,
+        multicol_align="c"
+    )
+
+    # save table
+    with open(args.tables / "table_a6.tex", "w") as file:
+        file.write(table)
+
+    logger.info("Saved table a6")
 
     logger.info(f"Finished evaluating models")
 

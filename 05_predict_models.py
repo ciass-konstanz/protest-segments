@@ -220,262 +220,273 @@ def predict_models(
 
     logger.info(f"Starting predicting models with arguments {args}")
 
-    # loop over methods
-    if args.with_conventional:
-        methods = ["logistic", "tree", "forest", "xgboost", "resnet", "resnet50", "vit"]
-    else:
-        methods = ["logistic", "tree", "forest", "xgboost"]
+    # loop over confidence levels
+    confidences = ["low", "high"]
+    for conf in confidences:
+        logger.info(f"Starting predicting models for confidence level {conf}")
 
-    for mod in methods:
-        logger.info(f"Starting predicting models for classification method {mod}")
-        if mod in methods[:4]:
-            # images
-            images_df = pd.read_csv(args.images)
-            images_df = images_df.loc[(images_df["protest"].isin([0, 1, 2, 3]))]
-            images_df["protest"] = images_df["protest"].replace({0: 0, 1: 0, 2: 1, 3: 1})
+        # loop over methods
+        if args.with_conventional:
+            methods = ["logistic", "tree", "forest", "xgboost", "resnet", "resnet50", "vit"]
+        else:
+            methods = ["logistic", "tree", "forest", "xgboost"]
 
-            # loop over vocabularies
-            vocabularies = ["coco", "lvis"]
-            for voc in vocabularies:
-                logger.info(f"Starting predicting models for vocabulary {voc}")
+        for mod in methods:
+            logger.info(f"Starting predicting models for classification method {mod}")
+            if mod in methods[:4]:
+                # images
+                images_df = pd.read_csv(args.images)
 
-                # loop over features
-                features = ["bin", "count", "area_max", "area_sum"]
-                for feat in features:
-                    logger.info(f"Starting predicting models for feature {feat}")
+                # filter images by confidence
+                if conf == "low":
+                    images_df = images_df.loc[(images_df["protest"].isin([0, 1, 2, 3]))]
+                    images_df["protest"] = images_df["protest"].replace({0: 0, 1: 0, 2: 1, 3: 1})
+                elif conf == "high":
+                    images_df = images_df.loc[(images_df["protest"].isin([0, 3]))]
+                    images_df["protest"] = images_df["protest"].replace({0: 0, 3: 1})
 
-                    if voc == "coco":
-                        categories = [cat.lower() for cat in MetadataCatalog.get("coco_2017_train").thing_classes]
-                        # segments
-                        segments_df = pd.read_csv(args.segments_coco)
-                        segments_df = segments_df.loc[(segments_df.id.isin(images_df.id) & (segments_df.seg_score >= 0.1))].reset_index(drop=True)
-                    elif voc == "lvis":
-                        categories = [cat.lower() for cat in MetadataCatalog.get("lvis_v1_train").thing_classes]
-                        # segments
-                        segments_df = pd.read_csv(args.segments_lvis)
-                        segments_df = segments_df.loc[(segments_df.id.isin(images_df.id) & (segments_df.seg_score >= 0.1))].reset_index(drop=True)
+                # loop over vocabularies
+                vocabularies = ["coco", "lvis"]
+                for voc in vocabularies:
+                    logger.info(f"Starting predicting models for vocabulary {voc}")
 
-                    if feat == "bin":
-                        segments_df = segments_df.pivot_table(index=["id"], columns=["seg_name"], values=["seg_score"], aggfunc={"seg_score": ["any"]})
-                        cols_missing = [category for category in categories if category not in [label for agg, var, label in segments_df.columns]]
-                        cols_missing = [f"{voc}_{category}_seg_score_any" for category in cols_missing]
-                        columns = [f"{voc}_{cat}_seg_score_any" for cat in categories]
-                    elif feat == "count":
-                        segments_df = segments_df.pivot_table(index=["id"], columns=["seg_name"], values=["seg_score"], aggfunc={"seg_score": ["count"]})
-                        cols_missing = [category for category in categories if category not in [label for agg, var, label in segments_df.columns]]
-                        cols_missing = [f"{voc}_{category}_seg_score_count" for category in cols_missing]
-                        columns = [f"{voc}_{cat}_seg_score_count" for cat in categories]
-                    elif feat == "area_max":
-                        segments_df = segments_df.pivot_table(index=["id"], columns=["seg_name"], values=["seg_prop"], aggfunc={"seg_prop": ["max"]})
-                        cols_missing = [category for category in categories if category not in [label for agg, var, label in segments_df.columns]]
-                        cols_missing = [f"{voc}_{category}_seg_prop_max" for category in cols_missing]
-                        columns = [f"{voc}_{cat}_seg_prop_max" for cat in categories]
-                    elif feat == "area_sum":
-                        segments_df = segments_df.pivot_table(index=["id"], columns=["seg_name"], values=["seg_prop"], aggfunc={"seg_prop": ["sum"]})
-                        cols_missing = [category for category in categories if category not in [label for agg, var, label in segments_df.columns]]
-                        cols_missing = [f"{voc}_{category}_seg_prop_sum" for category in cols_missing]
-                        columns = [f"{voc}_{cat}_seg_prop_sum" for cat in categories]
+                    # loop over features
+                    features = ["bin", "count", "area_max", "area_sum"]
+                    for feat in features:
+                        logger.info(f"Starting predicting models for feature {feat}")
 
-                    segments_df = segments_df.sort_index(axis=1, level=1)
-                    segments_df.columns = [f"{voc}_{label.lower()}_{var}_{agg}" for var, agg, label in segments_df.columns]
-                    segments_df = segments_df.reset_index()
-                    segments_df = segments_df.reindex(columns=segments_df.columns.tolist() + [column for column in cols_missing])
+                        if voc == "coco":
+                            categories = [cat.lower() for cat in MetadataCatalog.get("coco_2017_train").thing_classes]
+                            # segments
+                            segments_df = pd.read_csv(args.segments_coco)
+                            segments_df = segments_df.loc[(segments_df.id.isin(images_df.id) & (segments_df.seg_score >= 0.1))].reset_index(drop=True)
+                        elif voc == "lvis":
+                            categories = [cat.lower() for cat in MetadataCatalog.get("lvis_v1_train").thing_classes]
+                            # segments
+                            segments_df = pd.read_csv(args.segments_lvis)
+                            segments_df = segments_df.loc[(segments_df.id.isin(images_df.id) & (segments_df.seg_score >= 0.1))].reset_index(drop=True)
 
-                    images_df = pd.merge(images_df, segments_df, how="left", on="id")
-                    images_df = images_df.replace(to_replace={col: np.nan for col in images_df if col.startswith(f"{voc}_")}, value=0)
-                    images_df = images_df.astype({col: int for col in images_df if col.endswith("_seg_score_any")})
+                        if feat == "bin":
+                            segments_df = segments_df.pivot_table(index=["id"], columns=["seg_name"], values=["seg_score"], aggfunc={"seg_score": ["any"]})
+                            cols_missing = [category for category in categories if category not in [label for agg, var, label in segments_df.columns]]
+                            cols_missing = [f"{voc}_{category}_seg_score_any" for category in cols_missing]
+                            columns = [f"{voc}_{cat}_seg_score_any" for cat in categories]
+                        elif feat == "count":
+                            segments_df = segments_df.pivot_table(index=["id"], columns=["seg_name"], values=["seg_score"], aggfunc={"seg_score": ["count"]})
+                            cols_missing = [category for category in categories if category not in [label for agg, var, label in segments_df.columns]]
+                            cols_missing = [f"{voc}_{category}_seg_score_count" for category in cols_missing]
+                            columns = [f"{voc}_{cat}_seg_score_count" for cat in categories]
+                        elif feat == "area_max":
+                            segments_df = segments_df.pivot_table(index=["id"], columns=["seg_name"], values=["seg_prop"], aggfunc={"seg_prop": ["max"]})
+                            cols_missing = [category for category in categories if category not in [label for agg, var, label in segments_df.columns]]
+                            cols_missing = [f"{voc}_{category}_seg_prop_max" for category in cols_missing]
+                            columns = [f"{voc}_{cat}_seg_prop_max" for cat in categories]
+                        elif feat == "area_sum":
+                            segments_df = segments_df.pivot_table(index=["id"], columns=["seg_name"], values=["seg_prop"], aggfunc={"seg_prop": ["sum"]})
+                            cols_missing = [category for category in categories if category not in [label for agg, var, label in segments_df.columns]]
+                            cols_missing = [f"{voc}_{category}_seg_prop_sum" for category in cols_missing]
+                            columns = [f"{voc}_{cat}_seg_prop_sum" for cat in categories]
 
-                    # model
-                    if mod in methods[:3]:
-                        path = args.models / f"seg_low_{mod}_{voc}_{feat}.pkl"
-                        with open(path, "rb") as file:
-                            model = pickle.load(file)
-                    elif mod == methods[3]:
+                        segments_df = segments_df.sort_index(axis=1, level=1)
+                        segments_df.columns = [f"{voc}_{label}_{var}_{agg}" for var, agg, label in segments_df.columns]
+                        segments_df = segments_df.reset_index()
+                        segments_df = segments_df.reindex(columns=segments_df.columns.tolist() + [column for column in cols_missing])
+
+                        images_df = pd.merge(images_df, segments_df, how="left", on="id")
+                        images_df = images_df.replace(to_replace={col: np.nan for col in images_df if col.startswith(f"{voc}_")}, value=0)
+                        images_df = images_df.astype({col: int for col in images_df if col.endswith("_seg_score_any")})
+
                         # model
-                        if args.cpu:
-                            model = xgb.XGBClassifier(n_jobs=args.num_workers, importance_type="weight", random_state=args.seed)
-                        else:
-                            model = xgb.XGBClassifier(n_jobs=args.num_workers, importance_type="weight", gpu_id=0, predictor="gpu_predictor", tree_method="gpu_hist", random_state=args.seed)
-                        path = args.models / f"seg_low_{mod}_{voc}_{feat}.pth"
-                        model.load_model(path)
+                        if mod in methods[:3]:
+                            path = args.models / f"seg_{conf}_{mod}_{voc}_{feat}.pkl"
+                            with open(path, "rb") as file:
+                                model = pickle.load(file)
+                        elif mod == methods[3]:
+                            # model
+                            if args.cpu:
+                                model = xgb.XGBClassifier(n_jobs=args.num_workers, importance_type="weight")
+                            else:
+                                model = xgb.XGBClassifier(n_jobs=args.num_workers, importance_type="weight", gpu_id=0, predictor="gpu_predictor", tree_method="gpu_hist")
+                            path = args.models / f"seg_{conf}_{mod}_{voc}_{feat}.pth"
+                            model.load_model(path)
 
-                    # scale features
-                    if mod == methods[0]:
-                        scaler = MinMaxScaler(feature_range=(0, 1))
-                        scaler.fit(images_df.loc[images_df["split"] == "train", columns])
-                        images_df[columns] = scaler.transform(images_df[columns])
+                        # scale features
+                        if mod == methods[0]:
+                            scaler = MinMaxScaler(feature_range=(0, 1))
+                            scaler.fit(images_df.loc[images_df["split"] == "train", columns])
+                            images_df[columns] = scaler.transform(images_df[columns])
 
-                    # outputs
-                    outputs = []
+                        # outputs
+                        outputs = []
 
-                    batch_size = 10000
-                    print_freq = 1
-                    for count, start in enumerate(range(0, len(images_df), batch_size)):
-                        if count % print_freq == 0:
-                            logger.info(f"Starting predicting protest for image {start}")
-                        output = model.predict(images_df.loc[start:start + batch_size - 1, columns])
-                        outputs.append(output)
+                        batch_size = 10000
+                        print_freq = 1
+                        for count, start in enumerate(range(0, len(images_df), batch_size)):
+                            if count % print_freq == 0:
+                                logger.info(f"Starting predicting protest for image {start}")
+                            output = model.predict(images_df.loc[start:start + batch_size - 1, columns])
+                            outputs.append(output)
 
-                    # save outputs
-                    predictions_df = pd.DataFrame({
-                        "id": images_df["id"],
-                        "protest_pred": np.concatenate(outputs).ravel()
-                    })
-                    path = args.predictions / f"predictions_seg_low_{mod}_{voc}_{feat}.csv"
-                    predictions_df.sort_values("id").to_csv(path, index=False, float_format="%f")
+                        # save outputs
+                        predictions_df = pd.DataFrame({
+                            "id": images_df["id"],
+                            "protest_pred": np.concatenate(outputs).ravel()
+                        })
+                        path = args.predictions / f"predictions_seg_{conf}_{mod}_{voc}_{feat}.csv"
+                        predictions_df.sort_values("id").to_csv(path, index=False, float_format="%f")
 
-        elif mod == "resnet":
-            # seed
-            random.seed(args.seed)
-            torch.manual_seed(args.seed)
-            cudnn.deterministic = True
+            elif mod == "resnet":
+                # seed
+                random.seed(args.seed)
+                torch.manual_seed(args.seed)
+                cudnn.deterministic = True
 
-            # loader
-            transform = transforms.Compose([
-                transforms.Resize(256),
-                transforms.CenterCrop(224),
-                transforms.ToTensor(),
-                transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])])
-            dataset = TarDataset(archive=args.images_archive, images=args.images, transform=transform, confidence="low", mode="all")
-            loader = DataLoader(dataset, batch_size=128, num_workers=args.num_workers, shuffle=False)
+                # loader
+                transform = transforms.Compose([
+                    transforms.Resize(256),
+                    transforms.CenterCrop(224),
+                    transforms.ToTensor(),
+                    transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])])
+                dataset = TarDataset(archive=args.images_archive, images=args.images, transform=transform, confidence=conf, mode="all")
+                loader = DataLoader(dataset, batch_size=128, num_workers=args.num_workers, shuffle=False)
 
-            # device
-            device = torch.device("cpu" if args.cpu else "cuda:0")
+                # device
+                device = torch.device("cpu" if args.cpu else "cuda:0")
 
-            # model
-            model = modified_resnet50()
-            model = model.to(device)
-            path = args.models / f"{mod}_low.pth"
-            model.load_state_dict(torch.load(str(path))["state_dict"])
+                # model
+                model = modified_resnet50()
+                model = model.to(device)
+                path = args.models / f"{mod}.pth"
+                model.load_state_dict(torch.load(str(path))["state_dict"])
 
-            outputs = torch.tensor([], device=device)
+                outputs = torch.tensor([], device=device)
 
-            # switch to evaluate mode
-            model.eval()
+                # switch to evaluate mode
+                model.eval()
 
-            with torch.no_grad():
-                for i, (images, _) in enumerate(loader):
-                    if i % 100 == 0:
-                        logger.info(f"Predicting image batch {i}")
+                with torch.no_grad():
+                    for i, (images, _) in enumerate(loader):
+                        if i % 100 == 0:
+                            logger.info(f"Predicting image batch {i}")
 
-                    # get images and target on device
-                    images = images.to(device)
-                    # get output
-                    output = model(images)
-                    # collect
-                    outputs = torch.cat((outputs, output[:, 0]), 0)
+                        # get images and target on device
+                        images = images.to(device)
+                        # get output
+                        output = model(images)
+                        # collect
+                        outputs = torch.cat((outputs, output[:, 0]), 0)
 
-            logger.info("Finished predicting image batches")
+                logger.info("Finished predicting image batches")
 
-            # save outputs
-            predictions_df = pd.DataFrame({
-                "id": dataset.ids,
-                "protest_pred": outputs.cpu().numpy()
-            })
-            path = args.predictions / f"predictions_{mod}_low.csv"
-            predictions_df.sort_values("id").to_csv(path, index=False, float_format="%f")
+                # save outputs
+                predictions_df = pd.DataFrame({
+                    "id": dataset.ids,
+                    "protest_pred": outputs.cpu().numpy()
+                })
+                path = args.predictions / f"predictions_{mod}_{conf}.csv"
+                predictions_df.sort_values("id").to_csv(path, index=False, float_format="%f")
 
-        elif mod == "resnet50":
-            # seed
-            random.seed(args.seed)
-            torch.manual_seed(args.seed)
-            cudnn.deterministic = True
+            elif mod == "resnet50":
+                # seed
+                random.seed(args.seed)
+                torch.manual_seed(args.seed)
+                cudnn.deterministic = True
 
-            # loader
-            transform = transforms.Compose([
-                transforms.Resize(256),
-                transforms.CenterCrop(224),
-                transforms.ToTensor(),
-                transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
-            ])
-            dataset = TarDataset(archive=args.images_archive, images=args.images, transform=transform, confidence="low", mode="all")
-            loader = DataLoader(dataset, batch_size=128, num_workers=args.num_workers, shuffle=False)
+                # loader
+                transform = transforms.Compose([
+                    transforms.Resize(256),
+                    transforms.CenterCrop(224),
+                    transforms.ToTensor(),
+                    transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
+                ])
+                dataset = TarDataset(archive=args.images_archive, images=args.images, transform=transform, confidence=conf, mode="all")
+                loader = DataLoader(dataset, batch_size=128, num_workers=args.num_workers, shuffle=False)
 
-            # device
-            device = torch.device("cpu" if args.cpu else "cuda:0")
+                # device
+                device = torch.device("cpu" if args.cpu else "cuda:0")
 
-            # model
-            model = timm.create_model("resnet50", pretrained=False, num_classes=2)
-            model = model.to(device)
-            path = args.models / f"{mod}_low.pth"
-            model.load_state_dict(torch.load(str(path)))
+                # model
+                model = timm.create_model("resnet50", pretrained=False, num_classes=2)
+                model = model.to(device)
+                path = args.models / f"{mod}_{conf}.pth"
+                model.load_state_dict(torch.load(str(path)))
 
-            outputs = torch.tensor([], device=device)
+                outputs = torch.tensor([], device=device)
 
-            # switch to evaluate mode
-            model.eval()
+                # switch to evaluate mode
+                model.eval()
 
-            with torch.no_grad():
-                for i, (images, _) in enumerate(loader):
-                    if i % 100 == 0:
-                        logger.info(f"Predicting image batch {i}")
-                    # get images and target on device
-                    images = images.to(device)
-                    # get output
-                    output = model(images)
-                    # collect
-                    outputs = torch.cat((outputs, torch.softmax(output, dim=1)[:, 1]), 0)
+                with torch.no_grad():
+                    for i, (images, _) in enumerate(loader):
+                        if i % 100 == 0:
+                            logger.info(f"Predicting image batch {i}")
+                        # get images and target on device
+                        images = images.to(device)
+                        # get output
+                        output = model(images)
+                        # collect
+                        outputs = torch.cat((outputs, torch.softmax(output, dim=1)[:, 1]), 0)
 
-            logger.info("Finished predicting image batches")
+                logger.info("Finished predicting image batches")
 
-            # save outputs
-            predictions_df = pd.DataFrame({
-                "id": dataset.ids,
-                "protest_pred": outputs.cpu().numpy()
-            })
-            path = args.predictions / f"predictions_{mod}_low.csv"
-            predictions_df.sort_values("id").to_csv(path, index=False, float_format="%f")
+                # save outputs
+                predictions_df = pd.DataFrame({
+                    "id": dataset.ids,
+                    "protest_pred": outputs.cpu().numpy()
+                })
+                path = args.predictions / f"predictions_{mod}_{conf}.csv"
+                predictions_df.sort_values("id").to_csv(path, index=False, float_format="%f")
 
-        elif mod == "vit":
-            # seed
-            random.seed(args.seed)
-            torch.manual_seed(args.seed)
-            cudnn.deterministic = True
+            elif mod == "vit":
+                # seed
+                random.seed(args.seed)
+                torch.manual_seed(args.seed)
+                cudnn.deterministic = True
 
-            # loader
-            transform = transforms.Compose([
-                transforms.Resize(416),
-                transforms.CenterCrop(384),
-                transforms.ToTensor(),
-                transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
-            ])
-            dataset = TarDataset(archive=args.images_archive, images=args.images, transform=transform, confidence="low", mode="all")
-            loader = DataLoader(dataset, batch_size=128, num_workers=args.num_workers, shuffle=False)
+                # loader
+                transform = transforms.Compose([
+                    transforms.Resize(416),
+                    transforms.CenterCrop(384),
+                    transforms.ToTensor(),
+                    transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
+                ])
+                dataset = TarDataset(archive=args.images_archive, images=args.images, transform=transform, confidence=conf, mode="all")
+                loader = DataLoader(dataset, batch_size=128, num_workers=args.num_workers, shuffle=False)
 
-            # device
-            device = torch.device("cpu" if args.cpu else "cuda:0")
+                # device
+                device = torch.device("cpu" if args.cpu else "cuda:0")
 
-            # model
-            model = timm.create_model("vit_base_patch16_384", pretrained=False, num_classes=2)
-            model = model.to(device)
-            path = args.models / f"{mod}_low.pth"
-            model.load_state_dict(torch.load(str(path)))
+                # model
+                model = timm.create_model("vit_base_patch16_384", pretrained=False, num_classes=2)
+                model = model.to(device)
+                path = args.models / f"{mod}_{conf}.pth"
+                model.load_state_dict(torch.load(str(path)))
 
-            outputs = torch.tensor([], device=device)
+                outputs = torch.tensor([], device=device)
 
-            # switch to evaluate mode
-            model.eval()
+                # switch to evaluate mode
+                model.eval()
 
-            with torch.no_grad():
-                for i, (images, _) in enumerate(loader):
-                    if i % 100 == 0:
-                        logger.info(f"Predicting image batch {i}")
-                    # get images and target on device
-                    images = images.to(device)
-                    # get output
-                    output = model(images)
-                    # collect
-                    outputs = torch.cat((outputs, torch.softmax(output, dim=1)[:, 1]), 0)
+                with torch.no_grad():
+                    for i, (images, _) in enumerate(loader):
+                        if i % 100 == 0:
+                            logger.info(f"Predicting image batch {i}")
+                        # get images and target on device
+                        images = images.to(device)
+                        # get output
+                        output = model(images)
+                        # collect
+                        outputs = torch.cat((outputs, torch.softmax(output, dim=1)[:, 1]), 0)
 
-            logger.info("Finished predicting image batches")
+                logger.info("Finished predicting image batches")
 
-            # save outputs
-            predictions_df = pd.DataFrame({
-                "id": dataset.ids,
-                "protest_pred": outputs.cpu().numpy()
-            })
-            path = args.predictions / f"predictions_{mod}_low.csv"
-            predictions_df.sort_values("id").to_csv(path, index=False, float_format="%f")
+                # save outputs
+                predictions_df = pd.DataFrame({
+                    "id": dataset.ids,
+                    "protest_pred": outputs.cpu().numpy()
+                })
+                path = args.predictions / f"predictions_{mod}_{conf}.csv"
+                predictions_df.sort_values("id").to_csv(path, index=False, float_format="%f")
 
     logger.info("Finished predicting protest")
 

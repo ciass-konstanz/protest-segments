@@ -7,11 +7,13 @@ Extract segments
 
 """
 
+import os
 import csv
 import sys
 import torch
 import logging
 import tarfile
+import requests
 import argparse
 import numpy as np
 from PIL import Image
@@ -116,13 +118,23 @@ def extract_segments(
     logger.info("Prepare segmenter")
 
     if args.vocabulary == "coco":
+        # download model weights
+        model_path = "models/maskdino_swinl_50ep_300q_hid2048_3sd1_instance_maskenhanced_mask52.3ap_box59.0ap.pth"
+        model_url = "https://github.com/IDEA-Research/detrex-storage/releases/download/maskdino-v0.1.0/maskdino_swinl_50ep_300q_hid2048_3sd1_instance_maskenhanced_mask52.3ap_box59.0ap.pth"
+
+        if not os.path.exists(model_path):
+            logger.info("Download model weights")
+            r = requests.get(model_url)
+            with open(model_path, "wb") as f:
+                f.write(r.content)
+
         # config
         cfg = get_cfg()
         # for poly lr schedule
         add_deeplab_config(cfg)
         add_maskformer2_config(cfg)
-        cfg.merge_from_file(str(args.config))
-        cfg.MODEL.WEIGHTS = str(args.model)
+        cfg.merge_from_file("modules/MaskDINO/configs/coco/instance-segmentation/swin/maskdino_R50_bs16_50ep_4s_dowsample1_2048.yaml")
+        cfg.MODEL.WEIGHTS = "models/maskdino_swinl_50ep_300q_hid2048_3sd1_instance_maskenhanced_mask52.3ap_box59.0ap.pth"
         cfg.MODEL.RETINANET.SCORE_THRESH_TEST = args.confidence_threshold # no effect
         cfg.MODEL.ROI_HEADS.SCORE_THRESH_TEST = args.confidence_threshold # no effect
         cfg.MODEL.PANOPTIC_FPN.COMBINE.INSTANCES_CONFIDENCE_THRESH = args.confidence_threshold # no effect
@@ -132,12 +144,22 @@ def extract_segments(
         # class names
         class_names = {class_num: class_name.lower() for class_num, class_name in enumerate(MetadataCatalog.get(cfg.DATASETS.TRAIN[0]).thing_classes)}
     elif args.vocabulary == "lvis":
+        # download model weights
+        model_path = "models/Detic_LCOCOI21k_CLIP_SwinB_896b32_4x_ft4x_max-size.pth"
+        model_url = "https://dl.fbaipublicfiles.com/detic/Detic_LCOCOI21k_CLIP_SwinB_896b32_4x_ft4x_max-size.pth"
+
+        if not os.path.exists(model_path):
+            logger.info("Download model weights")
+            r = requests.get(model_url)
+            with open(model_path, "wb") as f:
+                f.write(r.content)
+
         # config
         cfg = get_cfg() # weight-file
         add_centernet_config(cfg)
         add_detic_config(cfg)
-        cfg.merge_from_file(str(args.config))
-        cfg.MODEL.WEIGHTS = str(args.model)
+        cfg.merge_from_file("modules/Detic/configs/Detic_LCOCOI21k_CLIP_SwinB_896b32_4x_ft4x_max-size.yaml")
+        cfg.MODEL.WEIGHTS = "models/Detic_LCOCOI21k_CLIP_SwinB_896b32_4x_ft4x_max-size.pth"
         cfg.MODEL.ROI_BOX_HEAD.CAT_FREQ_PATH = "modules/Detic/datasets/metadata/lvis_v1_train_cat_info.json"
         cfg.MODEL.RETINANET.SCORE_THRESH_TEST = args.confidence_threshold
         cfg.MODEL.ROI_HEADS.SCORE_THRESH_TEST = args.confidence_threshold
@@ -241,16 +263,6 @@ def get_parser() -> argparse.ArgumentParser:
         type=str,
         choices=["coco", "lvis"],
         help="Name of vocabulary",
-    )
-    parser.add_argument(
-        "--model",
-        type=Path,
-        help="Path to model file",
-    )
-    parser.add_argument(
-        "--config",
-        type=Path,
-        help="Path to config file",
     )
     parser.add_argument(
         "--confidence-threshold",

@@ -55,12 +55,12 @@ def eval_importances(
 
     # features
     segments_df = segments_df.pivot_table(index=["id"], columns=["seg_name"], values=["seg_prop"], aggfunc={"seg_prop": ["sum"]})
-    cols_missing = [category for category in categories if category not in [label.lower() for agg, var, label in segments_df.columns]]
-    cols_missing = [f"lvis_{category.lower()}_seg_prop_sum" for category in cols_missing]
-    cols = [f"lvis_{cat.lower()}_seg_prop_sum" for cat in categories]
+    cols_missing = [category for category in categories if category not in [label for agg, var, label in segments_df.columns]]
+    cols_missing = [f"lvis_{category}_seg_prop_sum" for category in cols_missing]
+    cols = [f"lvis_{cat}_seg_prop_sum" for cat in categories]
 
     segments_df = segments_df.sort_index(axis=1, level=1)
-    segments_df.columns = [f"lvis_{label.lower()}_{var}_{agg}" for var, agg, label in segments_df.columns]
+    segments_df.columns = [f"lvis_{label}_{var}_{agg}" for var, agg, label in segments_df.columns]
     segments_df = segments_df.reset_index()
     segments_df = segments_df.reindex(columns=segments_df.columns.tolist() + [column for column in cols_missing])
 
@@ -71,10 +71,9 @@ def eval_importances(
     # model
     logger.info(f"Starting loading model")
     if args.cpu:
-        model = xgb.XGBClassifier(n_jobs=args.num_workers, importance_type="weight", random_state=args.seed)
+        model = xgb.XGBClassifier(n_jobs=args.num_workers, importance_type="weight")
     else:
-        model = xgb.XGBClassifier(n_jobs=args.num_workers, importance_type="weight", gpu_id=0, predictor="gpu_predictor", tree_method="gpu_hist", random_state=args.seed)
-
+        model = xgb.XGBClassifier(n_jobs=args.num_workers, importance_type="weight", gpu_id=0, predictor="gpu_predictor", tree_method="gpu_hist")
     model.load_model(args.models / "seg_low_xgboost_lvis_area_sum.pth")
 
     # features
@@ -121,6 +120,7 @@ def eval_importances(
 
     # save features
     features_df.to_csv(args.features / "features_seg_low_xgboost_lvis_area_sum.csv", index=False, float_format="%f")
+    logger.info("Saved features with confidence low, classification method xgboost, vocabulary lvis and features area_sum")
 
     # create dict for countries
     countries = {
@@ -148,9 +148,10 @@ def eval_importances(
               "xtick.color": "black",
               "axes.labelcolor": "black",
               "axes.edgecolor": "black",
-              "text.usetex": True,
-              "font.family": "serif",
-              "font.serif": ["Computer Modern Serif"],
+              #"text.usetex": True,
+              #"font.family": "serif",
+              #"font.serif": ["Computer Modern Serif"],
+              "font.serif": ["Verdana"],
               "axes.labelsize": 9,
               "axes.titlesize": 9,
               "legend.fontsize": 7,
@@ -179,10 +180,11 @@ def eval_importances(
     ax[0].set_yticklabels([0.0, 0.1, 0.2, 0.3, 0.4], fontsize=8)
 
     ax[0].legend(handles=[tuple(bar_group) for bar_group in ax[0].containers],
-                 labels=["Protest", "No protest"],
-                 facecolor="white", edgecolor="white", framealpha=1,
-                 bbox_to_anchor=(1.0, 1.0), loc="upper right", borderpad=0, fontsize=8,
-                 frameon=False, markerfirst=False, handletextpad=0.3, handlelength=0.8)
+        labels=["Protest", "No protest"],
+        facecolor="white", edgecolor="white", framealpha=1, bbox_to_anchor=(1.0, 1.0),
+        loc="upper right", borderpad=0, fontsize=8, frameon=False, markerfirst=False,
+        handletextpad=0.3, handlelength=0.8
+    )
 
     # plot feature importances
     tmp = features_df.loc[features_df["feature_name"].isin(features_area_sum_important)]
@@ -278,6 +280,182 @@ def eval_importances(
     # save figure
     plt.savefig(args.figures / "figure_6_3.pdf", format="pdf", bbox_inches="tight", pad_inches=0.01, dpi=200)
     logger.info("Saved figure with different importances for candle")
+
+    # images
+    logger.info("Starting loading images")
+    images_df = pd.read_csv(args.images)
+    # filter images
+    images_df = images_df.loc[(images_df["protest"].isin([0, 3]))]
+    # recode protest labels
+    images_df["protest"] = images_df["protest"].replace({0: 0, 3: 1})
+
+    # merge images with segments
+    images_df = pd.merge(images_df, segments_df, how="left", on="id")
+    images_df = images_df.replace(to_replace={col: np.nan for col in images_df if col.startswith(f"lvis_")}, value=0)
+    images_df = images_df.astype({col: int for col in images_df if col.endswith("_seg_score_any")})
+
+    # model
+    logger.info(f"Starting loading model")
+    if args.cpu:
+        model = xgb.XGBClassifier(n_jobs=args.num_workers, importance_type="weight")
+    else:
+        model = xgb.XGBClassifier(n_jobs=args.num_workers, importance_type="weight", gpu_id=0, predictor="gpu_predictor", tree_method="gpu_hist")
+    model.load_model(args.models / "seg_high_xgboost_lvis_area_sum.pth")
+
+    # features
+    features_df = pd.DataFrame()
+
+    for location, group in images_df.groupby("location"):
+        # feature importances
+        logger.info(f"Starting getting feature importances for location {location}")
+        importances = permutation_importance(
+            model,
+            group.loc[group["split"] == "train", cols],
+            group.loc[group["split"] == "train", "protest"],
+            scoring=["precision", "recall", "f1"],
+            n_repeats=5,
+            n_jobs=1,
+            random_state=args.seed
+        )
+
+        importances_df = pd.DataFrame({
+            "feature": cols,
+            "location": location,
+            "imp_prec_mean": importances["precision"].importances_mean.flatten(),
+            "imp_prec_std": importances["precision"].importances_std.flatten(),
+            "imp_rec_mean": importances["recall"].importances_mean.flatten(),
+            "imp_rec_std": importances["recall"].importances_std.flatten(),
+            "imp_f1_mean": importances["f1"].importances_mean.flatten(),
+            "imp_f1_std": importances["f1"].importances_std.flatten()
+        })
+
+        # feature counts
+        logger.info(f"Starting getting areas for location {location}")
+        props_df = group.loc[group["split"] == "train"].groupby(["protest"])[cols].mean().reset_index()
+        props_df = pd.melt(props_df, id_vars="protest", value_vars=cols)
+        props_df = pd.DataFrame([{
+                "feature": seg_name,
+                "area_sum_protest": props_df.loc[(props_df.variable == seg_name) & (props_df.protest == 1.0), "value"].to_list()[0],
+                "area_sum_noprotest": props_df.loc[(props_df.variable == seg_name) & (props_df.protest == 0.0), "value"].to_list()[0],
+                "area_sum_diff": props_df.loc[(props_df.variable == seg_name) & (props_df.protest == 1.0), "value"].to_list()[0] - props_df.loc[(props_df.variable == seg_name) & (props_df.protest == 0.0), "value"].to_list()[0]
+        } for seg_name in props_df.variable.unique()]
+        )
+        # features
+        features_location_df = pd.merge(importances_df, props_df, on="feature", how="left")
+        features_df = pd.concat([features_df, features_location_df], ignore_index=True)
+
+    # save features
+    features_df.to_csv(args.features / "features_seg_high_xgboost_lvis_area_sum.csv", index=False, float_format="%f")
+    logger.info("Saved features with confidence high, classification method xgboost, vocabulary lvis and features area_sum")
+
+    # add feature names
+    features_df["feature_name"] = features_df["feature"].replace({'_seg_prop_sum': ''}, regex=True).replace({'lvis_': ''}, regex=True).replace({"_": " "}, regex=True).str.capitalize()
+    # add country names
+    features_df["location_name"] = features_df["location"].apply(lambda c: countries[c])
+
+    # find features with largest area sum in protest images
+    features_area_sum_most = features_df.groupby(["feature_name"])[["imp_f1_mean", "area_sum_protest", "area_sum_noprotest"]].mean().reset_index().nlargest(10, columns="area_sum_protest")["feature_name"].to_list()
+
+    # find features with large importances
+    features_area_sum_important = features_df.groupby(["feature_name"])[["imp_f1_mean", "area_sum_protest", "area_sum_noprotest"]].mean().reset_index().nlargest(10, columns="imp_f1_mean")["feature_name"].to_list()
+
+    # create figure
+    fig, ax = plt.subplots(nrows=1, ncols=2, sharey=False, figsize=(5.85, 2.26))
+
+    # plot feature frequencies
+    tmp = features_df.loc[features_df["feature_name"].isin(features_area_sum_most)]
+    tmp = pd.wide_to_long(tmp, ["area_sum"], i=["feature_name", "location"], j="protest", sep="_", suffix="\D+").reset_index()
+    tmp = tmp.loc[tmp.protest.isin(["protest", "noprotest"])].replace({"protest": "Protest", "noprotest": "No Protest"})
+    sns.barplot(data=tmp, x="feature_name", y="area_sum", hue="protest", order=features_area_sum_most, orient="v",ax=ax[0], palette="muted", errorbar=None) # errorbar="sd", errwidth=2,
+
+    ax[0].tick_params(axis="x", which="major", bottom=False, pad=0)
+    ax[0].set_xlabel(None)
+    ax[0].set_ylabel("Proportion")
+    ax[0].set_ylim([0.0, 0.4])
+    ax[0].get_legend().set_visible(False)
+    ax[0].set_box_aspect(1)
+    ax[0].set_xticklabels(ax[0].get_xticklabels(), rotation=45, ha="right", fontsize=8)
+    ax[0].set_yticks([0.0, 0.1, 0.2, 0.3, 0.4])
+    ax[0].set_yticklabels([0.0, 0.1, 0.2, 0.3, 0.4], fontsize=8)
+
+    ax[0].legend(handles=[tuple(bar_group) for bar_group in ax[0].containers],
+        labels=["Protest", "No protest"],
+        facecolor="white", edgecolor="white", framealpha=1, bbox_to_anchor=(1.0, 1.0),
+        loc="upper right", borderpad=0, fontsize=8, frameon=False, markerfirst=False,
+        handletextpad=0.3, handlelength=0.8
+    )
+
+    # plot feature importances
+    tmp = features_df.loc[features_df["feature_name"].isin(features_area_sum_important)]
+    sns.barplot(data=tmp, x="feature_name", y="imp_f1_mean", order=features_area_sum_important, orient="v", ax=ax[1], palette='muted', errorbar=None)
+
+    ax[1].tick_params(axis="x", which="major", bottom=False, pad=0)
+    ax[1].set_xlabel(None)
+    ax[1].set_ylabel("F1 score")
+    ax[1].set_ylim([0.0, 0.23])
+    ax[1].set_box_aspect(1)
+    ax[1].set_xticklabels(ax[1].get_xticklabels(), rotation=45, ha="right", fontsize=8)
+    ax[1].set_yticks([0.0, 0.05, 0.1, 0.15, 0.2])
+    ax[1].set_yticklabels([0.0, 0.05, 0.1, 0.15, 0.2], fontsize=8)
+
+    plt.subplots_adjust(wspace=0.3)
+    plt.savefig(args.figures / "figure_a2.pdf", format="pdf", bbox_inches="tight", pad_inches = 0.01, dpi=200)
+    logger.info("Saved figure with similar importances")
+
+    # find features with large deviations
+    tmp1 = features_df.groupby(["feature_name"])[["imp_f1_mean", "area_sum_protest", "area_sum_noprotest"]].agg({"imp_f1_mean":["mean","std"]}).reset_index()
+    tmp1.columns = ["_".join(a) for a in tmp1.columns.to_flat_index()]
+    # calculate distance to mean importance of all countries
+    tmp2 = features_df.copy(deep=True)
+    tmp2["imp_f1_mean_mean"] = tmp2.apply(lambda row: tmp1.loc[(tmp1.feature_name_ == row["feature_name"]), "imp_f1_mean_mean"].tolist()[0], axis=1)
+    tmp2["imp_f1_mean_dist"] = tmp2.apply(lambda row: row["imp_f1_mean"] - row["imp_f1_mean_mean"], axis=1)
+    tmp2["imp_f1_mean_rdist"] = tmp2["imp_f1_mean_dist"] / tmp2["imp_f1_mean_mean"]
+    tmp2["imp_f1_mean_dist_abs"] = tmp2["imp_f1_mean_dist"].abs()
+    # list features
+    #tmp2.loc[tmp2["feature_name"].isin(features_area_sum_important)].nlargest(20, columns="imp_f1_mean_rdist")[["location", "feature_name", "imp_f1_mean_dist", "imp_f1_mean_rdist"]]
+
+    # create figure
+    fig, ax = plt.subplots(nrows=1, ncols=3, sharey=True, figsize=(5.85, 3.76))
+    sns.set_palette("deep")
+
+    # get importances for all countries for one feature
+    tmp = tmp2.loc[tmp2["feature_name"] == "Poster"].sort_values("imp_f1_mean_dist", ascending=False)
+    tmp["imp_f1_mean_norm"] = (tmp["imp_f1_mean_dist"]-tmp["imp_f1_mean_dist"].mean())/tmp["imp_f1_mean_dist"].std()
+    #sns.barplot(data=tmp, x="imp_f1_mean_norm", y="country_name", order=countries.values(), ax=ax[0], color=(0.40784313725490196, 0.40784313725490196, 0.40784313725490196, 1.0))
+    sns.barplot(data=tmp, x="imp_f1_mean_norm", y="location_name", order=countries.values(), ax=ax[0], palette="muted")
+    ax[0].tick_params(axis='y', which='major', left=False)
+    ax[0].set_box_aspect(1)
+    ax[0].set_xlabel(None)
+    ax[0].set_ylabel(None)
+    l = tmp["imp_f1_mean_norm"].abs().max() * 1.1
+    ax[0].set_xlim([-l, l])
+
+    # get importances for all countries for one feature
+    tmp = tmp2.loc[tmp2["feature_name"] == "Car (automobile)"].sort_values("imp_f1_mean_dist", ascending=False)
+    tmp["imp_f1_mean_norm"] = (tmp["imp_f1_mean_dist"]-tmp["imp_f1_mean_dist"].mean())/tmp["imp_f1_mean_dist"].std()
+    sns.barplot(data=tmp, x="imp_f1_mean_norm", y="location_name", order=countries.values(), ax=ax[1], palette="muted")
+    ax[1].tick_params(axis='y', which='major', left=False)
+    ax[1].set_box_aspect(1)
+    ax[1].set_xlabel(None)
+    ax[1].set_ylabel(None)
+    l = tmp["imp_f1_mean_norm"].abs().max() * 1.1
+    ax[1].set_xlim([-l, l])
+
+    # get importances for all countries for one feature
+    tmp = tmp2.loc[tmp2["feature_name"] == "Candle"].sort_values("imp_f1_mean_dist", ascending=False)
+    tmp["imp_f1_mean_norm"] = (tmp["imp_f1_mean_dist"]-tmp["imp_f1_mean_dist"].mean())/tmp["imp_f1_mean_dist"].std()
+    sns.barplot(data=tmp, x="imp_f1_mean_norm", y="location_name", order=countries.values(), ax=ax[2], palette="muted")
+    ax[2].set_xticks([], minor=True)
+    ax[2].tick_params(axis='y', which='major', left=False)
+    ax[2].set_box_aspect(1)
+    ax[2].set_xlabel(None)
+    ax[2].set_ylabel(None)
+    l = tmp["imp_f1_mean_norm"].abs().max() * 1.1
+    ax[2].set_xlim([-l, l])
+
+    # save figure
+    plt.savefig(args.figures / "figure_a3.pdf", format="pdf", bbox_inches='tight', pad_inches = 0.01, dpi=200)
+    logger.info("Saved figure with different importances for poster, car and candle")
 
     logger.info("Finished evaluating importances")
 
