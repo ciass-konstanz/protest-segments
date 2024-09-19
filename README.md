@@ -19,7 +19,7 @@
       <span> · </span>
       <a target="_blank" href="https://huggingface.co/spaces/ciass/protest-segments">Demo</a>
       <span> · </span>
-      <a target="_blank" href="">Data</a>
+      <a target="_blank" href="https://doi.org/10.7910/DVN/TFTEF2">Data</a>
     </h4>
   </div>
 </div>
@@ -200,7 +200,7 @@ For the different configurations the following segmentation models are used.
 <!-- Data -->
 ## Data
 
-You can download the data via [Dataverse]().
+You can download the data via [Dataverse](https://doi.org/10.7910/DVN/TFTEF2).
 
 <!-- Images -->
 ### Images
