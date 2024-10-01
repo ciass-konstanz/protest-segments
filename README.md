@@ -13,7 +13,7 @@
       and released in this repository. 
     </p>
     <h4>
-      <a target="_blank" href="">Paper</a>
+      <a target="_blank" href="https://arxiv.org/abs/2407.03786">Paper</a>
       <span> · </span>
       <a target="_blank" href="https://github.com/ciass-konstanz/protest-segments/">Code</a>
       <span> · </span>
