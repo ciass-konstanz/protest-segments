@@ -13,7 +13,7 @@
       and released in this repository. 
     </p>
     <h4>
-      <a target="_blank" href="https://arxiv.org/abs/2407.03786">Paper</a>
+      <a target="_blank" href="https://doi.org/10.1017/pan.2024.18">Paper</a>
       <span> · </span>
       <a target="_blank" href="https://github.com/ciass-konstanz/protest-segments/">Code</a>
       <span> · </span>
@@ -537,4 +537,13 @@ while its data and model weights are distributed under the [CC-BY-4.0 License](h
 If you find this project and its materials useful, please cite our paper. 
 
 ```
+@article{
+    scholz2024improving,
+    title={Improving Computer Vision Interpretability: Transparent Two-Level Classification for Complex Scenes},
+    DOI={10.1017/pan.2024.18},
+    journal={Political Analysis},
+    author={Scholz, Stefan and Weidmann, Nils B. and Steinert-Threlkeld, Zachary C. and Keremoğlu, Eda and Goldlücke, Bastian},
+    year={2024},
+    pages={1–15}
+}
 ```
