@@ -538,12 +538,14 @@ If you find this project and its materials useful, please cite our paper.
 
 ```
 @article{
-    scholz2024improving,
+    scholz2025improving,
     title={Improving Computer Vision Interpretability: Transparent Two-Level Classification for Complex Scenes},
-    DOI={10.1017/pan.2024.18},
-    journal={Political Analysis},
-    author={Scholz, Stefan and Weidmann, Nils B. and Steinert-Threlkeld, Zachary C. and Keremoğlu, Eda and Goldlücke, Bastian},
-    year={2024},
-    pages={1–15}
+    volume={33}, 
+    DOI={10.1017/pan.2024.18}, 
+    number={2}, 
+    journal={Political Analysis}, 
+    author={Scholz, Stefan and Weidmann, Nils B. and Steinert-Threlkeld, Zachary C. and Keremoğlu, Eda and Goldlücke, Bastian}, 
+    year={2025}, 
+    pages={107–121}
 }
 ```
